@@ -24,6 +24,46 @@ Input: ''', end='')
     return check_version_input()
 
 
+def parse_query_display(query, selectN):
+    """Submit the query to database functions,
+    then parse and display the result
+
+    Args:
+        query (str) : SQL query
+        selectN (str) : an input taken from user to tell
+            the database how many result should be display.
+    """
+
+    # Check the pass-in selectN argument
+    if type(selectN) is str and not selectN.isdigit():
+        selectN = 0
+
+    r = execute_query(query, selectN)
+
+    # Parsing the result and displaying them on screen.
+
+    print("\n" + "- "*30)
+
+    if query == newsdb.SELECT_ALL_ARTICLES:
+        print("Lists of all articles."
+              if selectN == 0
+              else "Top " + str(selectN) + " articles with most views:")
+        for row in r:
+            print(row[1] + " - " + str(row[2]) + " views.")
+    elif query == newsdb.SELECT_ALL_AUTHORS:
+        print("Lists of all authors."
+              if selectN == 0
+              else "Top " + str(selectN) + " authors with most views:")
+        for row in r:
+            print(row[0] + " - " + str(row[2])
+                  + " views across all the articles.")
+    else:
+        print("Lists of all dates with 1% errors or more:")
+        for row in r:
+            print(row[0].strftime("%B %d, %Y") + " - " + str(row[1]))
+    print("- "*30 + "\n")
+
+
 def main():
     """Main function."""
 
@@ -34,11 +74,15 @@ def main():
     # Continue the program until option Q is selected.
     while command.upper() != 'Q':
         if command == '1':
-            command = str(display_ui())
+            parse_query_display(
+                newsdb.SELECT_ALL_ARTICLES,
+                check_version_input("Show top Nth (default = 0, 0 for show all): "))  # noqa
         elif command == '2':
-            command = str(display_ui())
+            parse_query_display(
+                newsdb.SELECT_ALL_AUTHORS,
+                check_version_input("Show top Nth (default = 0, 0 for show all): "))  # noqa
         elif command == '3':
-            command = str(display_ui())
+            parse_query_display(newsdb.SELECT_ERROR_DATE, 0)
         command = str(display_ui())
     # Exit the program after Q is pressed.
     sys.exit()
