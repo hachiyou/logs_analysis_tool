@@ -1,12 +1,16 @@
+#!/usr/bin/env python3.6.5
+
 import psycopg2
 
+# Database name we are connecting to.
 DBNAME = "news"
 
-"""Query Section"""
-CREATE_VIEW =
-'''
-CREATE OR REPLACE VIEW articles_access_data AS
-SELECT au.name AS author, ar.title AS article_title, aa.number_of_access AS most_accessed  # noqa
+# Query Sections
+
+# String holding the sql code for creating view
+CREATE_ARTICLE_ACCESS_VIEW = '''
+CREATE OR REPLACE VIEW articles_access_view AS
+SELECT au.name AS author, ar.title AS article_title, aa.number_of_access AS most_accessed
 FROM articles AS ar, authors AS au,
     (
         SELECT path, count(id) as number_of_access
@@ -16,90 +20,81 @@ FROM articles AS ar, authors AS au,
         ORDER BY number_of_access DESC
     ) as aa
     WHERE aa.path LIKE ('%' || ar.slug) AND ar.author = au.id;
-'''
+'''  # noqa
 
-SELECT_FAV_AUTHOR =
-'''
-SELECT author, count(author) as number_of_articles, sum(most_accessed) AS total_access  # noqa
-FROM articles_access_data
-GROUP BY author
-ORDER BY Total_Access DESC;
-'''
-
-DISPLAY_ERROR_PERCENT =
-'''
-SELECT DATE(l.time) AS access_date, COUNT(status) AS erroneous_access, t.total_access, TO_CHAR(100 * COUNT(status)::FLOAT / total_access, '0D99%') AS error_percentage  # noqa
+# String holding the sql code for creating view
+CREATE_DAILY_ERROR_VIEW = '''
+CREATE OR REPLACE VIEW daily_error_percentage_view AS
+SELECT DATE(l.time) AS access_date, COUNT(status) AS erroneous_access, t.total_access
 FROM log AS l, (
     SELECT date(time) as access_date, COUNT(status) as total_access
     FROM log
     GROUP BY DATE(time)
     ) AS t
 WHERE status = '404 NOT FOUND' AND DATE(l.time) = t.access_date
-GROUP BY DATE(l.time), t.total_access
-ORDER BY error_percentage DESC;
-'''
-"""============================================================="""
+GROUP BY DATE(l.time), t.total_access;'''  # noqa
+
+# String holding the sql code for fetching all the article in the database.
+SELECT_ALL_ARTICLES = '''SELECT * FROM articles_access_view;'''
+
+# String holding the sql code for fetching all the authors in the database.
+SELECT_ALL_AUTHORS = '''
+SELECT author, count(author) as number_of_articles, sum(most_accessed) AS total_access
+FROM articles_access_view
+GROUP BY author
+ORDER BY Total_Access DESC;'''  # noqa
+
+# String holding the sql code for fetching all the dates in the database.
+SELECT_ERROR_DATE = '''
+SELECT access_date, 100 * erroneous_access::FLOAT / total_access AS error_percentage
+FROM daily_error_percentage_view
+WHERE (100 * erroneous_access::FLOAT / total_access) > 1;'''  # noqa
 
 
 def __create_view():
-    """
-    Create a view name "articles_access_data"
+    """Create two views name "articles_access_view" and "daily_error_percentage_view"
     to use for skimming through data
-    """
+    """  # noqa
+
+    # Access the database
     db = psycopg2.connect(database=DBNAME)
+
+    # Get the cursor for fetching data
     c = db.cursor()
-    c.execute(CREATE_VIEW)
+
+    # Execute queries
+    c.execute(CREATE_ARTICLE_ACCESS_VIEW)
+    c.execute(CREATE_DAILY_ERROR_VIEW)
+
+    # Close the connection after completing execution
     db.close()
 
 
-def get_most_accessed(topN=0):
-    """
-    Return top N most accessed article fetch from the database.
-    0 or negative to fetch all the articles.
-    """
+def execute_query(sqlToExecuted, topN='0'):
+    """ Execute the pass-in SQL query and return the result.
+    Select the top N most result to display if topN parameter is given.
+
+    Args:
+        sqlToExecuted (str): SQL query
+        topN (str) : an input taken from user to tell
+            the database how many result should be display.
+    """  # noqa
+
+    # Access the database
     db = psycopg2.connect(database=DBNAME)
+
+    # Get the cursor for fetching data
     c = db.cursor()
-    query = "SELECT * FROM articles_access_data"
-    if topN > 0:
-        query += " LIMIT " + topN + ";"
+
+    # Execute queries
+    if int(topN) > 0:
+        query = sqlToExecuted[:-1] + " LIMIT " + str(topN) + ";"
     else:
-        query += ";"
+        query = sqlToExecuted
     c.execute(query)
     r = c.fetchall()
+
+    # Close the connection after completing execution
     db.close()
-    return r
 
-
-def get_most_popular(topN=0):
-    """
-    Return top N most popular authors.
-    0 or negative to fetch all the authors.
-    """
-    db = psycopg2.connect(database=DBNAME)
-    c = db.cursor()
-    if topN > 0:
-        query = SELECT_FAV_AUTHOR[:-1]
-        + " LIMIT " + topN + ";"
-    else:
-        query = SELECT_FAV_AUTHOR
-    c.execute(query)
-    r = c.fetchall()
-    db.close()
-    return r
-
-
-def get_error_percentage(topN=0):
-    """
-    Return the top N date with the most erroneous access.
-    0 or negative to fetch all the date.
-    """
-    db = psycopg2.connect(database=DBNAME)
-    c = db.cursor()
-    if topN > 0:
-        query = DISPLAY_ERROR_PERCENT[:-1] + " LIMIT " + topN + ";"
-    else:
-        query = DISPLAY_ERROR_PERCENT
-    c.execute(query)
-    r = c.fetchall()
-    db.close()
     return r
